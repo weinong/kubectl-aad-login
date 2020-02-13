@@ -227,7 +227,7 @@ func (ts *tokenSourceManualToken) Refresh() error {
 	token, err := ts.Token()
 	// if refresh fails, refresh token may have expired, invoke token source again
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "refreshing token failed. fall back to innter source %s\n", ts.Name())
+		fmt.Fprintf(os.Stderr, "refreshing token failed. fall back to inner source %s\n", ts.source.Name())
 		token, err := ts.source.Token()
 		if err != nil {
 			return err
