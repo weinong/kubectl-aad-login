@@ -4,7 +4,7 @@ import (
 	"os"
 
 	"github.com/spf13/pflag"
-	"github.com/weinong/kubernetes-aad-plugin/pkg/cmd"
+	"github.com/weinong/kubectl-aad-login/pkg/cmd"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 )
 
