@@ -1,4 +1,4 @@
-module github.com/weinong/kubernetes-aad-plugin
+module github.com/weinong/kubectl-aad-login
 
 go 1.12
 
@@ -9,5 +9,4 @@ require (
 	github.com/spf13/pflag v1.0.5
 	k8s.io/cli-runtime v0.17.2
 	k8s.io/client-go v0.17.2
-	k8s.io/sample-cli-plugin v0.17.2
 )
