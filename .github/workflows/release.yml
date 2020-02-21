@@ -1,9 +1,12 @@
-name: release
+name: Release
+
 on:
   push:
     tags:
       - '*.*'
+
 jobs:
+
   build:
     name: Build
     runs-on: ubuntu-latest
