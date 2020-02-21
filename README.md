@@ -1,3 +1,5 @@
+![Build on Push](https://github.com/weinong/kubectl-aad-login/workflows/Build%20on%20Push/badge.svg?branch=master)
+
 # kubectl-aad-login
 It is a [kubectl plugin](https://kubernetes.io/docs/tasks/extend-kubectl/kubectl-plugins/) supporting various OAuth login flows on Azure AD which are not currently supported in `kubectl`. 
 It populates the kubeconfig file with acquired AAD token. It will refresh access token when the access token has expired.
