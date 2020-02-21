@@ -4,21 +4,25 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/weinong/kubectl-aad-login/pkg/msal"
 )
 
 const (
-	tokenType         = "Bearer"
-	azureAuthProvider = "azure"
+	tokenType                          = "Bearer"
+	azureAuthProvider                  = "azure"
+	msIdentityPlatformEndpointTemplate = "%s/oauth2/v2.0/%s"
+	defaultEnvironmentName             = "AzurePublicCloud"
 
-	defaultEnvironmentName = "AzurePublicCloud"
-
-	envServicePrincipalClientID     = "AZURE_SERVICE_PRINCIPAL_CLIENT_ID"
-	envServicePrincipalClientSecret = "AZURE_SERVICE_PRINCIPAL_CLIENT_SECRET"
+	envServicePrincipalClientID     = "AAD_SERVICE_PRINCIPAL_CLIENT_ID"
+	envServicePrincipalClientSecret = "AAD_SERVICE_PRINCIPAL_CLIENT_SECRET"
+	envROPCUsername                 = "AAD_USER_PRINCIPAL_NAME"
+	envROPCPassword                 = "AAD_USER_PRINCIPAL_PASSWORD"
 
 	cfgClientID     = "client-id"
 	cfgTenantID     = "tenant-id"
@@ -66,6 +70,71 @@ type tokenSourceManualToken struct {
 	tenantID    string
 	resourceID  string
 	name        string
+}
+
+type tokenSourceResourceOwner struct {
+	environment azure.Environment
+	clientID    string
+	username    string
+	password    string
+	tenantID    string
+	resourceID  string
+	name        string
+}
+
+func (ts *tokenSourceResourceOwner) Name() string {
+	return "TokenSourceResourceOwnerUsername"
+}
+
+func (ts *tokenSourceResourceOwner) Token() (adal.Token, error) {
+	emptyToken := adal.Token{}
+	u, err := url.Parse(ts.environment.ActiveDirectoryEndpoint)
+	if err != nil {
+		return emptyToken, err
+	}
+	ep, err := u.Parse(fmt.Sprintf(msIdentityPlatformEndpointTemplate, ts.tenantID, "token"))
+	if err != nil {
+		return emptyToken, err
+	}
+	oauthConfig := adal.OAuthConfig{
+		TokenEndpoint: *ep,
+	}
+	spt, err := msal.NewResourceOwnerToken(oauthConfig, ts.clientID, ts.username, ts.password, ts.resourceID)
+	if err != nil {
+		return emptyToken, fmt.Errorf("creating new service principal for token refresh: %v", err)
+	}
+
+	err = spt.Refresh()
+	if err != nil {
+		return emptyToken, err
+	}
+	return spt.Token(), nil
+}
+
+func newTokenSourceResourceOwner(environment azure.Environment, clientID, username, password, tenantID, resourceID string) (tokenSource, error) {
+	if clientID == "" {
+		return nil, errors.New("clientID is empty")
+	}
+	if username == "" {
+		return nil, errors.New("username is empty")
+	}
+	if password == "" {
+		return nil, errors.New("password is empty")
+	}
+	if tenantID == "" {
+		return nil, errors.New("tenantID is empty")
+	}
+	if resourceID == "" {
+		return nil, errors.New("resourceID is empty")
+	}
+	return &tokenSourceResourceOwner{
+		environment: environment,
+		clientID:    clientID,
+		username:    username,
+		password:    password,
+		tenantID:    tenantID,
+		resourceID:  resourceID,
+	}, nil
 }
 
 func (ts *tokenSourceServicePrincipal) Name() string {
@@ -163,9 +232,16 @@ func newTokenSourceDeviceCode(environment azure.Environment, clientID string, te
 }
 
 func (ts *tokenSourceManualToken) ToCfg() map[string]string {
+	refreshToken := ts.token.RefreshToken
+	if len(refreshToken) == 0 {
+		// for service principal login, refresh token may be empty
+		// this is to workaround with the validation in kubectl which requires refresh token
+		// https://github.com/kubernetes/kubernetes/blob/20e6883a75db6dbc7908aba2ee69ed9afa8525ed/staging/src/k8s.io/client-go/plugin/pkg/client/auth/azure/azure.go#L250
+		refreshToken = "bogus"
+	}
 	return map[string]string{
 		cfgAccessToken:  ts.token.AccessToken,
-		cfgRefreshToken: ts.token.RefreshToken,
+		cfgRefreshToken: refreshToken,
 		cfgEnvironment:  ts.environment.Name,
 		cfgClientID:     ts.clientID,
 		cfgTenantID:     ts.tenantID,
@@ -261,7 +337,7 @@ func newTokenSourceManualToken(environment azure.Environment, clientID, tenantID
 	}, nil
 }
 
-func newTokenRefresher(cfg map[string]string, useSPN, forceRefresh bool) (tokenRefresher, error) {
+func newTokenRefresher(cfg map[string]string, useSPN, useROPC, forceRefresh bool) (tokenRefresher, error) {
 	var (
 		tenantID     string
 		clientID     string
@@ -270,12 +346,15 @@ func newTokenRefresher(cfg map[string]string, useSPN, forceRefresh bool) (tokenR
 		innerTS      tokenSource
 		env          azure.Environment
 		err          error
-		ok           bool
 	)
 
 	tenantID = cfg[cfgTenantID]
 	if tenantID == "" {
 		return nil, fmt.Errorf("no tenant ID in cfg: %s", cfgTenantID)
+	}
+	clientID = cfg[cfgClientID]
+	if clientID == "" {
+		return nil, fmt.Errorf("no client ID in cfg: %s", cfgClientID)
 	}
 	resourceID = cfg[cfgApiserverID]
 	if resourceID == "" {
@@ -290,8 +369,9 @@ func newTokenRefresher(cfg map[string]string, useSPN, forceRefresh bool) (tokenR
 		return nil, err
 	}
 
-	if useSPN {
-		clientID, ok = os.LookupEnv(envServicePrincipalClientID)
+	switch {
+	case useSPN:
+		spn, ok := os.LookupEnv(envServicePrincipalClientID)
 		if !ok {
 			return nil, fmt.Errorf("cannot find %s environment variable", envServicePrincipalClientID)
 		}
@@ -299,15 +379,24 @@ func newTokenRefresher(cfg map[string]string, useSPN, forceRefresh bool) (tokenR
 		if !ok {
 			return nil, fmt.Errorf("cannot find %s environment variable", envServicePrincipalClientSecret)
 		}
-		innerTS, err = newTokenSourceServicePrincipal(env, clientID, clientSecret, tenantID, resourceID)
+		innerTS, err = newTokenSourceServicePrincipal(env, spn, clientSecret, tenantID, resourceID)
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		clientID = cfg[cfgClientID]
-		if clientID == "" {
-			return nil, fmt.Errorf("no client ID in cfg: %s", cfgClientID)
+	case useROPC:
+		username, ok := os.LookupEnv(envROPCUsername)
+		if !ok {
+			return nil, fmt.Errorf("cannot find %s environment variable", envROPCUsername)
 		}
+		password, ok := os.LookupEnv(envROPCPassword)
+		if !ok {
+			return nil, fmt.Errorf("cannot find %s environment variable", envROPCPassword)
+		}
+		innerTS, err = newTokenSourceResourceOwner(env, clientID, username, password, tenantID, resourceID)
+		if err != nil {
+			return nil, err
+		}
+	default:
 		innerTS, err = newTokenSourceDeviceCode(env, clientID, tenantID, resourceID)
 		if err != nil {
 			return nil, err

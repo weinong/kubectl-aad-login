@@ -32,6 +32,7 @@ type Options struct {
 	rawConfig           api.Config
 	args                []string
 	useServicePrincipal bool
+	useUserPrincipal    bool
 	forceRefresh        bool
 
 	genericclioptions.IOStreams
@@ -57,7 +58,7 @@ func NewCmd(streams genericclioptions.IOStreams) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:          "aad login [flags]",
-		Short:        "login to azure active directory",
+		Short:        "login to azure active directory and populate kubeconfig with AAD tokens",
 		Example:      fmt.Sprintf(cmdExample, "kubectl"),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -78,6 +79,9 @@ func NewCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.Flags().BoolVar(&o.useServicePrincipal, "service-principal", o.useServicePrincipal,
 		fmt.Sprintf("if true, it will use service principal to login using %s and %s envrionment variables",
 			envServicePrincipalClientID, envServicePrincipalClientSecret))
+	cmd.Flags().BoolVar(&o.useUserPrincipal, "user-principal", o.useUserPrincipal,
+		fmt.Sprintf("if true, it will use user principal to login using %s and %s envrionment variables",
+			envROPCUsername, envROPCPassword))
 	cmd.Flags().BoolVar(&o.forceRefresh, "force", o.forceRefresh, "if true, it will always login and disregard the access token in kubeconfig")
 	o.configFlags.AddFlags(cmd.Flags())
 
@@ -115,6 +119,9 @@ func (o *Options) Validate() error {
 	if len(o.args) > 0 {
 		return errors.New("no argument is allowed")
 	}
+	if o.useServicePrincipal && o.useUserPrincipal {
+		return errors.New("service principal and user principal cannot be used at the same time")
+	}
 	return nil
 }
 
@@ -128,7 +135,7 @@ func (o *Options) Run() error {
 		// not azure auth provider. skip
 		return nil
 	}
-	ts, err := newTokenRefresher(o.resultingAuthInfo.AuthProvider.Config, o.useServicePrincipal, o.forceRefresh)
+	ts, err := newTokenRefresher(o.resultingAuthInfo.AuthProvider.Config, o.useServicePrincipal, o.useUserPrincipal, o.forceRefresh)
 	if err != nil {
 		return err
 	}
