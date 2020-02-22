@@ -24,26 +24,5 @@ jobs:
             dep ensure
         fi
 
-    - name: Build (linux)
-      env:
-        GOOS: linux
-        GOARCH: amd64
+    - name: Build
       run: make
-      
-    - name: Build (darwin)
-      env:
-        GOOS: darwin
-        GOARCH: amd64
-      run: make
-      
-    - name: Build (windows)
-      env:
-        GOOS: windows
-        GOARCH: amd64
-      run: make
-    
-    - name: Publish
-      uses: actions/upload-artifact@v1
-      with:
-        name: artifacts
-        path: bin
