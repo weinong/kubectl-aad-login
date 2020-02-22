@@ -4,13 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure"
-	"github.com/weinong/kubectl-aad-login/pkg/msal"
 )
 
 const (
@@ -88,18 +86,14 @@ func (ts *tokenSourceResourceOwner) Name() string {
 
 func (ts *tokenSourceResourceOwner) Token() (adal.Token, error) {
 	emptyToken := adal.Token{}
-	u, err := url.Parse(ts.environment.ActiveDirectoryEndpoint)
+	oauthConfig, err := adal.NewOAuthConfigWithAPIVersion(ts.environment.ActiveDirectoryEndpoint, ts.tenantID, nil)
 	if err != nil {
-		return emptyToken, err
+		return emptyToken, fmt.Errorf("building the OAuth configuration without api-version for device code authentication: %v", err)
 	}
-	ep, err := u.Parse(fmt.Sprintf(msIdentityPlatformEndpointTemplate, ts.tenantID, "token"))
-	if err != nil {
-		return emptyToken, err
+	callback := func(t adal.Token) error {
+		return nil
 	}
-	oauthConfig := adal.OAuthConfig{
-		TokenEndpoint: *ep,
-	}
-	spt, err := msal.NewResourceOwnerToken(oauthConfig, ts.clientID, ts.username, ts.password, ts.resourceID)
+	spt, err := adal.NewServicePrincipalTokenFromUsernamePassword(*oauthConfig, ts.clientID, ts.username, ts.password, ts.resourceID, callback)
 	if err != nil {
 		return emptyToken, fmt.Errorf("creating new service principal for token refresh: %v", err)
 	}
