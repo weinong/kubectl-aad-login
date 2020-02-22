@@ -4,7 +4,7 @@
 It is a [kubectl plugin](https://kubernetes.io/docs/tasks/extend-kubectl/kubectl-plugins/) supporting various OAuth login flows on Azure AD which are not currently supported in `kubectl`. 
 It populates the kubeconfig file with acquired AAD token. It will refresh access token when the access token has expired.
 Currently, it supports:
-* device code flow with fix to https://github.com/kubernetes/kubernetes/issues/86410 such that `audience` claim does not have `spn:` prefix (supports AKS AADv1 and v2, this change is required for AKS AADv2)
+* device code flow with fix to https://github.com/kubernetes/kubernetes/issues/86410 such that `audience` claim does not have `spn:` prefix (supports AKS AADv1 and v2, this change is required for AKS AADv2 unless you are on kubectl versions TBD...)
 * non-interactive login using service principal credential (supports AKS AADv2 only)
 * non-interactive login using user principal credential (supports AKS AADv1 and v2)
 
