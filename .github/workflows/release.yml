@@ -1,8 +1,8 @@
 name: Release
 on:
-  push:
-    tags: 
-      - 'v*'
+  release:
+    types: [created]
+
 jobs:
   build:
     name: Build
@@ -44,18 +44,9 @@ jobs:
         GOARCH: amd64
       run: make
     
-    - name: Publish (linux)
-      uses: actions/upload-artifact@v1
+    - name: Publish
+      uses: skx/github-action-publish-binaries@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        name: linux_amd64
-        path: bin/linux_amd64
-    - name: Publish (darwin)
-      uses: actions/upload-artifact@v1
-      with:
-        name: darwin_amd64
-        path: bin/darwin_amd64
-    - name: Publish (windows)
-      uses: actions/upload-artifact@v1
-      with:
-        name: windows_amd64
-        path: bin/windows_amd64
+        args: 'bin/**'
