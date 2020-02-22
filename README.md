@@ -11,7 +11,7 @@ Currently, it supports:
 The environment being tested is AKS AAD and AKS AADv2 (public preview in March 2020)
 
 ## Install
-Download the plugin https://github.com/weinong/kubectl-aad-login/releases/download/v0.0.1/kubectl-aad-login.zip
+Go to https://github.com/weinong/kubectl-aad-login/releases to download pre-built plugins.
 
 Copy out the binary to directory under search path
 
