@@ -45,9 +45,14 @@ jobs:
         GOARCH: amd64
       run: make
     
+    - name: Zip
+      uses: montudor/action-zip@v0.1.0
+      with:
+        args: zip -qq -r kubectl-aad-login.zip bin/*
+    
     - name: Publish
       uses: skx/github-action-publish-binaries@master
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        args: 'bin/**/*'
+        args: kubectl-aad-login.zip
