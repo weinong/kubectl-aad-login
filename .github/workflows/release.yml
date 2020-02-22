@@ -1,0 +1,61 @@
+name: Release
+on:
+  push:
+    tags: 
+      - 'v*'
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    env:
+      GO111MODULE: on 
+    steps:
+    - name: Set up Go 1.13
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.13
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Get dependencies
+      run: |
+        go get -v -t -d ./...
+        if [ -f Gopkg.toml ]; then
+            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+            dep ensure
+        fi
+    - name: Build (linux)
+      env:
+        GOOS: linux
+        GOARCH: amd64
+      run: make
+      
+    - name: Build (darwin)
+      env:
+        GOOS: darwin
+        GOARCH: amd64
+      run: make
+      
+    - name: Build (windows)
+      env:
+        GOOS: windows
+        GOARCH: amd64
+      run: make
+    
+    - name: Publish (linux)
+      uses: actions/upload-artifact@v1
+      with:
+        name: linux_amd64
+        path: bin/linux_amd64
+    - name: Publish (darwin)
+      uses: actions/upload-artifact@v1
+      with:
+        name: darwin_amd64
+        path: bin/darwin_amd64
+    - name: Publish (windows)
+      uses: actions/upload-artifact@v1
+      with:
+        name: windows_amd64
+        path: bin/windows_amd64
